@@ -47,7 +47,10 @@ pub struct Config {
 }
 
 impl Config {
-    /// Load the user's configuration file.
+    /// Load the user's configuration file, allowing for files specified with the command-line
+    /// argument `config`. 
+    /// (e.g. `run --config custom.json`, `run -c=custom.yml`, etc.) 
+    /// Otherwise locate a config file by checking "ruma.[json|toml|yaml|yml]"
     pub fn from_file(filename: Option<&str>) -> Result<Config, CliError> {
         let config: RawConfig;
 
@@ -71,18 +74,18 @@ impl Config {
                 debug!("Couldn't find specified configuration file: `{}`", filename);
                 return Err(CliError::new("User-specified configuration file was not found."));
             }
-        } else if Self::json_exists() {
+        } 
+        else if Self::json_exists() {
             info!("Parsing JSON config file: `ruma.json`");
             config = Self::load_json("ruma.json")?;
         } else if Self::toml_exists() {
             info!("Parsing TOML config file: `ruma.toml`");
             config = Self::load_toml("ruma.toml")?;
         } else if Self::yaml_exists() {
-            let yaml_fn = if Path::new("ruma.yaml").is_file() {
-                "ruma.yaml"
-            } else {
-                "ruma.yml"
-            };
+            if Path::new("ruma.yaml").is_file() && Path::new("ruma.yml").is_file() {
+                info!("Warning: `ruma.yaml` and `ruma.yml` both exist! Defaulting to the former.");
+            }
+            let yaml_fn = if Path::new("ruma.yaml").is_file() { "ruma.yaml" } else { "ruma.yml" };
             info!("Parsing YAML config file: `{}`", yaml_fn);
             config = Self::load_yaml(yaml_fn)?;
         } else {
