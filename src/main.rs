@@ -32,7 +32,7 @@ extern crate serde_yaml;
 extern crate toml;
 extern crate unicase;
 
-use clap::{App, AppSettings, SubCommand};
+use clap::{App, AppSettings, SubCommand, Arg};
 
 use config::Config;
 use crypto::generate_macaroon_secret_key;
@@ -77,6 +77,13 @@ fn main() {
         .subcommand(
             SubCommand::with_name("run")
                 .about("Runs the Ruma server")
+                .arg(Arg::with_name("config")
+                     .short("c")
+                     .long("config")
+                     .value_name("FILE")
+                     .help("Define a custom config file (defaults to `ruma.[json|toml|yaml]`)")
+                     .takes_value(true)
+                     )
         )
         .subcommand(
             SubCommand::with_name("secret")
@@ -87,8 +94,8 @@ fn main() {
 
     info!("Beginning to process argument parsing");
     match matches.subcommand() {
-        ("run", Some(_)) => {
-            let config = match Config::from_file() {
+        ("run", Some(subcmd)) => {
+            let config = match Config::from_file(subcmd.value_of("config")) {
                 Ok(config) => config,
                 Err(error) => {
                     debug!("Either no file was found or it failed to open");

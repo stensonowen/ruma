@@ -48,18 +48,43 @@ pub struct Config {
 
 impl Config {
     /// Load the user's configuration file.
-    pub fn from_file() -> Result<Config, CliError> {
+    pub fn from_file(filename: Option<&str>) -> Result<Config, CliError> {
         let config: RawConfig;
 
-        if Self::json_exists() {
+        if let Some(filename) = filename {
+            info!("Using custom filename: `{}`", filename);
+            if Path::new(filename).is_file() {
+                if filename.ends_with(".json") {
+                    info!("Parsing JSON config file: `{}`", filename);
+                    config = Self::load_json(filename)?;
+                } else if filename.ends_with(".toml") {
+                    info!("Parsing toml config file: `{}`", filename);
+                    config = Self::load_toml(filename)?;
+                } else if filename.ends_with(".yml") || filename.ends_with(".yaml") {
+                    info!("Parsing yaml config file: `{}`", filename);
+                    config = Self::load_yaml(filename)?;
+                } else {
+                    debug!("Failed to identify type of config file: `{}`", filename);
+                    return Err(CliError::new("Could not recognize custom configuration file."));
+                }
+            } else {
+                debug!("Couldn't find specified configuration file: `{}`", filename);
+                return Err(CliError::new("User-specified configuration file was not found."));
+            }
+        } else if Self::json_exists() {
             info!("Parsing JSON config file: `ruma.json`");
-            config = Self::load_json()?;
+            config = Self::load_json("ruma.json")?;
         } else if Self::toml_exists() {
             info!("Parsing TOML config file: `ruma.toml`");
-            config = Self::load_toml()?;
+            config = Self::load_toml("ruma.toml")?;
         } else if Self::yaml_exists() {
-            info!("Parsing YAML config file: `ruma.yaml`");
-            config = Self::load_yaml()?;
+            let yaml_fn = if Path::new("ruma.yaml").is_file() {
+                "ruma.yaml"
+            } else {
+                "ruma.yml"
+            };
+            info!("Parsing YAML config file: `{}`", yaml_fn);
+            config = Self::load_yaml(yaml_fn)?;
         } else {
             error!("Couldn't find config file: `ruma.*`");
             return Err(CliError::new("No configuration file was found."));
@@ -79,10 +104,31 @@ impl Config {
                 "macaroon_secret_key must be valid Base64."
             ))},
         };
+        
+        let address = match config.bind_address {
+            Some(a) => {
+                info!("Parsed address to use: {}", a);
+                a
+            },
+            None => {
+                info!("Failed to locate address; defaulting to localhost");
+                String::from("127.0.0.1")
+            }
+        };
+        let port = match config.bind_port {
+            Some(p) => {
+                info!("Parsed port to use: {}", p);
+                p
+            },
+            None => {
+                info!("Failed to locate port; defaulting to 3000");
+                String::from("3000")
+            }
+        };
 
         Ok(Config {
-            bind_address: config.bind_address.unwrap_or("127.0.0.1".to_string()),
-            bind_port: config.bind_port.unwrap_or("3000".to_string()),
+            bind_address: address,
+            bind_port: port,
             domain: config.domain,
             macaroon_secret_key: macaroon_secret_key,
             postgres_url: config.postgres_url,
@@ -90,17 +136,23 @@ impl Config {
     }
 
     /// Load the `RawConfig` from a JSON configuration file.
-    fn load_json() -> Result<RawConfig, CliError> {
-        let contents = Self::read_file_contents("ruma.json");
+    fn load_json(filename: &str) -> Result<RawConfig, CliError> {
+        let contents = Self::read_file_contents(filename);
         match serde_json::from_str(&contents) {
-            Ok(config) => return Ok(config),
-            Err(error) => return Err(CliError::from(error)),
+            Ok(config) => {
+                info!("Successfully parsed JSON config file");
+                return Ok(config)
+            },
+            Err(error) => {
+                debug!("Failed to parse JSON config file: {}", error);
+                return Err(CliError::from(error))
+            },
         };
     }
 
     /// Load the `RawConfig` from a TOML configuration file.
-    fn load_toml() -> Result<RawConfig, CliError> {
-        let contents = Self::read_file_contents("ruma.toml");
+    fn load_toml(filename: &str) -> Result<RawConfig, CliError> {
+        let contents = Self::read_file_contents(filename);
         let mut parser = toml::Parser::new(&contents);
         let data  = parser.parse();
 
@@ -108,28 +160,32 @@ impl Config {
             for err in &parser.errors {
                 let (loline, locol) = parser.to_linecol(err.lo);
                 let (hiline, hicol) = parser.to_linecol(err.hi);
-                println!("ruma.toml: {}:{}-{}:{} error: {}", loline, locol, hiline, hicol, err.desc);
+                println!("{}: {}:{}-{}:{} error: {}", filename, loline, locol, hiline, hicol, err.desc);
+                debug!("{}: {}:{}-{}:{} error: {}", filename, loline, locol, hiline, hicol, err.desc);
             }
 
-            return Err(CliError::new("Unable to parse ruma.toml."));
+            return Err(CliError::new("Unable to parse toml config file."));
         }
 
         let config = toml::Value::Table(data.unwrap());
         match toml::decode(config) {
-            Some(t) => return Ok(t),
-            None => return Err(CliError::new("Error while decoding ruma.toml.")),
+            Some(t) => {
+                info!("Successfully parsed `{}`", filename);
+                return Ok(t)
+            },
+            None => {
+                debug!("Failed to retrieve valid information in the decode phase from `{}`",
+                       filename);
+                return Err(CliError::new("Error while decoding toml config file."))
+            },
         }
     }
 
     /// Load the `RawConfig` from a YAML configuration file.
-    fn load_yaml() -> Result<RawConfig, CliError> {
+    fn load_yaml(filename: &str) -> Result<RawConfig, CliError> {
         let contents;
 
-        if Path::new("ruma.yaml").is_file() {
-            contents = Self::read_file_contents("ruma.yaml");
-        } else {
-            contents = Self::read_file_contents("ruma.yml");
-        }
+        contents = Self::read_file_contents(filename);
 
         match serde_yaml::from_str(&contents) {
             Ok(config) => return Ok(config),
