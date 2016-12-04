@@ -52,23 +52,32 @@ impl Config {
         let config: RawConfig;
 
         if Self::json_exists() {
+            info!("Parsing JSON config file: `ruma.json`");
             config = Self::load_json()?;
         } else if Self::toml_exists() {
+            info!("Parsing TOML config file: `ruma.toml`");
             config = Self::load_toml()?;
         } else if Self::yaml_exists() {
+            info!("Parsing YAML config file: `ruma.yaml`");
             config = Self::load_yaml()?;
         } else {
+            error!("Couldn't find config file: `ruma.*`");
             return Err(CliError::new("No configuration file was found."));
         }
 
         let macaroon_secret_key = match decode(&config.macaroon_secret_key) {
             Ok(bytes) => match bytes.len() {
                 32 => bytes,
-                _ => return Err(CliError::new("macaroon_secret_key must be 32 bytes.")),
+                _ => {
+                    debug!("Found secret key of invalid length");
+                    return Err(CliError::new("macaroon_secret_key must be 32 bytes."))
+                },
             },
-            Err(_) => return Err(CliError::new(
+            Err(e) => {
+                debug!("Failed to retrieve macaroon secret {}", e);
+                return Err(CliError::new(
                 "macaroon_secret_key must be valid Base64."
-            )),
+            ))},
         };
 
         Ok(Config {

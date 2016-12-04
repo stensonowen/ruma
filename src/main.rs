@@ -68,6 +68,7 @@ embed_migrations!();
 fn main() {
     env_logger::init().expect("Failed to initialize logger.");
 
+    info!("Initializing argument parsing");
     let matches = App::new("ruma")
         .version(env!("CARGO_PKG_VERSION"))
         .about("A Matrix homeserver client API")
@@ -83,11 +84,14 @@ fn main() {
         )
         .get_matches();
 
+
+    info!("Beginning to process argument parsing");
     match matches.subcommand() {
         ("run", Some(_)) => {
             let config = match Config::from_file() {
                 Ok(config) => config,
                 Err(error) => {
+                    debug!("Either no file was found or it failed to open");
                     println!("Failed to load configuration file: {}", error);
 
                     return;
@@ -97,10 +101,12 @@ fn main() {
             match Server::new(&config) {
                 Ok(server) => {
                     if let Err(error) = server.run() {
+                        debug!("Runtime error: {}", error);
                         println!("{}", error);
                     }
                 },
                 Err(error) => {
+                    info!("Failed to create server: {}", error);
                     println!("Failed to create server: {}", error);
 
                     return;
@@ -108,8 +114,14 @@ fn main() {
             }
         }
         ("secret", Some(_)) => match generate_macaroon_secret_key() {
-            Ok(key) => println!("{}", key),
-            Err(error) => println!("Failed to generate macaroon secret key: {}", error),
+            Ok(key) => {
+                info!("Generating macaroon secret");
+                println!("{}", key)
+            },
+            Err(error) => {
+                debug!("Failed to generate macaroon secret key: {}", error);
+                println!("Failed to generate macaroon secret key: {}", error)
+            },
         },
         _ => println!("{}", matches.usage()),
     };
