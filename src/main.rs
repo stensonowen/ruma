@@ -14,6 +14,9 @@ extern crate env_logger;
 #[macro_use] extern crate iron;
 #[cfg(test)] extern crate iron_test;
 #[macro_use] extern crate log;
+#[macro_use] extern crate slog;
+#[macro_use] extern crate slog_scope;
+extern crate slog_term;
 extern crate macaroons;
 extern crate mount;
 extern crate plugin;
@@ -63,10 +66,15 @@ pub mod room_membership;
 #[cfg(test)] pub mod test;
 pub mod user;
 
+use slog::DrainExt;
 embed_migrations!();
 
 fn main() {
     env_logger::init().expect("Failed to initialize logger.");
+
+	let drain = slog_term::streamer().compact().build().fuse();
+    let log = slog::Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION")));
+	slog_scope::set_global_logger(log);
 
     info!("Initializing argument parsing");
     let matches = App::new("ruma")
@@ -98,7 +106,7 @@ fn main() {
             let config = match Config::from_file(subcmd.value_of("config")) {
                 Ok(config) => config,
                 Err(error) => {
-                    debug!("Either no file was found or it failed to open");
+                    info!("Either no file was found or it failed to open");
                     println!("Failed to load configuration file: {}", error);
 
                     return;
@@ -108,7 +116,7 @@ fn main() {
             match Server::new(&config) {
                 Ok(server) => {
                     if let Err(error) = server.run() {
-                        debug!("Runtime error: {}", error);
+                        info!("Runtime error: {}", error);
                         println!("{}", error);
                     }
                 },
@@ -126,7 +134,7 @@ fn main() {
                 println!("{}", key)
             },
             Err(error) => {
-                debug!("Failed to generate macaroon secret key: {}", error);
+                info!("Failed to generate macaroon secret key: {}", error);
                 println!("Failed to generate macaroon secret key: {}", error)
             },
         },
