@@ -50,6 +50,7 @@ impl<'a> Server<'a> {
     /// Create a new `Server` from a `Config`.
     pub fn new(config: &Config)
     -> Result<Server, CliError> {
+		info!("Creating new server");
         Server::with_options(config, R2D2Config::default(), true)
     }
 
@@ -60,6 +61,7 @@ impl<'a> Server<'a> {
         r2d2_config: R2D2Config<PgConnection, R2D2DieselError>,
         set_up_db: bool,
     ) -> Result<Server, CliError> {
+        info!("Forming a server instance from config options");
         let mut r0_router = Router::new();
 
         r0_router.post("/account/password", AccountPassword::chain(), "account_password");
@@ -158,6 +160,7 @@ impl<'a> Server<'a> {
         let address = format!("{}:{}", self.config.bind_address, self.config.bind_port);
 
         info!("Starting Ruma server on {}.", address);
+        info!("Blocking Iron instance listening...");
 
         let iron = Iron::new(self.mount);
 
