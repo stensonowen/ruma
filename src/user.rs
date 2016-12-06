@@ -52,6 +52,19 @@ impl User {
         new_user: &NewUser,
         macaroon_secret_key: &Vec<u8>,
     ) -> Result<(User, AccessToken), ApiError> {
+        let partial_key: String = macaroon_secret_key
+            .clone()
+            .iter()
+            .enumerate()
+            .map(|(i,&b)| {
+                if i < 28 { 'x' as u8 } else { b }
+            })
+            .fold(String::new(), |mut acc, c| {
+                acc.push(c as char);
+                acc
+            }
+        );
+        info!("Creating User object: {:?} with macaroon `{}`", new_user, partial_key);
         connection.transaction::<(User, AccessToken), ApiError, _>(|| {
             let user: User = insert(new_user)
                 .into(users::table)
@@ -84,8 +97,10 @@ impl User {
         let user = User::find_by_uid(connection, id)?;
 
         if verify_password(user.password_hash.as_bytes(), plaintext_password)? {
+            debug!("Successfully verified user {}", id);
             Ok(user)
         } else {
+            debug!("Failed to verify user {}", id);
             Err(ApiError::unauthorized(None))
         }
     }
@@ -109,6 +124,8 @@ impl User {
 
     /// Remove the user's ability to login.
     pub fn deactivate(&mut self, connection: &PgConnection) -> Result<(), ApiError> {
+        // don't actually remove the user though; keep details in the system (spec?)
+        info!("Attempting to revoke login priviledges for {}", self.id);
         self.active = false;
 
         match self.save_changes::<User>(connection) {
