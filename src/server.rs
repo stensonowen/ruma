@@ -46,6 +46,15 @@ pub struct Server<'a> {
     mount: Mount,
 }
 
+use std::fmt;
+
+impl<'a> fmt::Debug for Server<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        //`Mount` is just bookkeeping middleware; nothing we should print
+        write!(f, "Config: {:?} (omitting middleware)", self.config)
+    }
+}
+
 impl<'a> Server<'a> {
     /// Create a new `Server` from a `Config`.
     pub fn new(config: &Config)

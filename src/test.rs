@@ -54,16 +54,19 @@ impl Test {
         // Since we don't have control of the `main` function during tests, we initialize the
         // logger here. It will only actually initialize on the first test that is run. Subsequent
         // calls will return an error, but we don't care, so just ignore the result.
+        info!("Creating new db test");
         match env_logger::init() {
             _ => {}
         }
 
         START.call_once(|| {
             if PgConnection::establish(DATABASE_URL).is_ok() {
+                info!("Connecting to Postgres");
                 let connection = PgConnection::establish(POSTGRES_URL).expect(
                     "Failed to connect to Postgres to drop the existing ruma_test table."
                 );
 
+                info!("Connecting / Resetting db");
                 connection.silence_notices(|| {
                     connection.execute("DROP DATABASE IF EXISTS ruma_test").expect(
                         "Failed to drop the existing ruma_test table."
@@ -94,16 +97,19 @@ impl Test {
             macaroon_secret_key: "YymznQHmKdN9B4f7iBalJB1tWEDy9LdaFSQJEtB3R5w=".into(),
             postgres_url: DATABASE_URL.to_string(),
         };
+        info!("Initialized config: {:?}", config);
 
         let r2d2_config = R2D2Config::builder()
             .pool_size(1)
             .connection_customizer(Box::new(TestTransactionConnectionCustomizer))
             .build();
+        info!("Initialized rd2d config: {:?}", r2d2_config);
 
         let server = match Server::with_options(&config, r2d2_config, false) {
             Ok(server) => server,
             Err(error) => panic!("Failed to create Iron server: {}", error),
         };
+        info!("Initialized server: {:?}", server);
 
         Test {
             mount: server.into_mount(),
@@ -132,6 +138,7 @@ impl Test {
 
     /// Makes a request to the server.
     pub fn request(&self, method: Method, path: &str, body: &str) -> Response {
+        info!("Requesting {}: `{}`", path, body);
         let mut headers = Headers::new();
 
         headers.set(ContentType::json());
